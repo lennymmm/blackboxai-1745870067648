@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generador de API REST desde Base de Datos</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-['Roboto'] min-h-screen flex flex-col items-center p-4">
+  <h1 class="text-3xl font-bold mb-6 text-gray-800">Generador de API REST desde Base de Datos</h1>
+
+  <section class="bg-white p-6 rounded shadow-md w-full max-w-3xl">
+    <form id="connectionForm" class="space-y-4">
+      <h2 class="text-xl font-semibold mb-2">Conexión a la Base de Datos</h2>
+
+      <div>
+        <label for="dbType" class="block font-medium mb-1">Tipo de Base de Datos</label>
+        <select id="dbType" name="dbType" required class="w-full border border-gray-300 rounded px-3 py-2">
+          <option value="">Seleccione...</option>
+          <option value="mssql">MSSQL</option>
+          <option value="mysql">MySQL</option>
+          <option value="supabase">Supabase</option>
+          <option value="mongodb">MongoDB</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="server" class="block font-medium mb-1">Servidor</label>
+        <input type="text" id="server" name="server" placeholder="localhost" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      </div>
+
+      <div>
+        <label for="port" class="block font-medium mb-1">Puerto</label>
+        <input type="number" id="port" name="port" placeholder="3306" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      </div>
+
+      <div>
+        <label for="database" class="block font-medium mb-1">Nombre de la Base de Datos</label>
+        <input type="text" id="database" name="database" placeholder="mi_base_datos" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      </div>
+
+      <div>
+        <label for="user" class="block font-medium mb-1">Usuario</label>
+        <input type="text" id="user" name="user" placeholder="usuario" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      </div>
+
+      <div>
+        <label for="password" class="block font-medium mb-1">Contraseña</label>
+        <input type="password" id="password" name="password" placeholder="contraseña" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      </div>
+
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+        Conectar y Obtener Metadatos
+      </button>
+    </form>
+  </section>
+
+  <section id="metadataSection" class="hidden bg-white p-6 rounded shadow-md w-full max-w-3xl mt-6">
+    <h2 class="text-xl font-semibold mb-4">Seleccione Tablas, Vistas y Procedimientos</h2>
+    <form id="selectionForm" class="space-y-4">
+      <div id="metadataContainer" class="space-y-4 max-h-96 overflow-y-auto border border-gray-300 rounded p-4"></div>
+      <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+        Generar Código API REST
+      </button>
+    </form>
+  </section>
+
+  <section id="codeSection" class="hidden bg-white p-6 rounded shadow-md w-full max-w-3xl mt-6">
+    <h2 class="text-xl font-semibold mb-4">Código Generado</h2>
+    <pre id="generatedCode" class="bg-gray-100 p-4 rounded overflow-x-auto max-h-96"></pre>
+  </section>
+
+  <script>
+    const connectionForm = document.getElementById('connectionForm');
+    const metadataSection = document.getElementById('metadataSection');
+    const metadataContainer = document.getElementById('metadataContainer');
+    const selectionForm = document.getElementById('selectionForm');
+    const codeSection = document.getElementById('codeSection');
+    const generatedCode = document.getElementById('generatedCode');
+
+    connectionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      metadataContainer.innerHTML = '';
+      codeSection.classList.add('hidden');
+      metadataSection.classList.add('hidden');
+
+      const formData = new FormData(connectionForm);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const response = await fetch('http://localhost:3000/api/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!response.ok) throw new Error('Error al conectar a la base de datos');
+        const metadata = await response.json();
+
+        // Show metadata selection UI
+        metadataSection.classList.remove('hidden');
+
+        // Render tables, views, procedures with checkboxes
+        ['tables', 'views', 'procedures'].forEach((type) => {
+          if (metadata[type] && metadata[type].length > 0) {
+            const section = document.createElement('div');
+            section.innerHTML = `<h3 class="font-semibold text-lg mb-2">${type.charAt(0).toUpperCase() + type.slice(1)}</h3>`;
+            metadata[type].forEach((item) => {
+              const id = `${type}-${item}`;
+              const label = document.createElement('label');
+              label.className = 'flex items-center space-x-2';
+              label.innerHTML = `<input type="checkbox" name="${type}" value="${item}" id="${id}" checked />
+                <span>${item}</span>`;
+              section.appendChild(label);
+            });
+            metadataContainer.appendChild(section);
+          }
+        });
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    selectionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(selectionForm);
+      const selected = {
+        tables: formData.getAll('tables'),
+        views: formData.getAll('views'),
+        procedures: formData.getAll('procedures'),
+      };
+
+      try {
+        const response = await fetch('http://localhost:3000/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selected),
+        });
+        if (!response.ok) throw new Error('Error al generar el código');
+        const result = await response.json();
+        generatedCode.textContent = result.code;
+        codeSection.classList.remove('hidden');
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  </script>
+</body>
+</html>
